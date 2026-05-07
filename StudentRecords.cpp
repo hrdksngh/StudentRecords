@@ -6,6 +6,23 @@
 #include <vector>
 #include <string>
 #include <optional>
+
+#include <thread>
+#include <chrono>
+#include <fstream>
+#include <sstream>
+
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+// Windows.h defines a macro called Division, clashes with string division in Student class. That's why the 2 shits above are needed
+
+#include <commdlg.h>
+
+#pragma comment(lib, "comdlg32.lib")
+
+#include <stdexcept>
+
 using namespace std;
 
 // Helper functions go here:
@@ -49,6 +66,21 @@ int getInt(const string& prompt) {
     }
 }
 
+string avoidCommas(const string& prompt) {
+    string input;
+
+    while (true) {
+        cout << prompt;
+        cin >> input;
+
+        if (input.find(',') == string::npos) {
+            return input;
+        }
+
+        cout << "Storing commas is not supported yet. Please enter a value without it!" << endl;
+    }
+}
+
 class Student {
 private:
 
@@ -66,7 +98,7 @@ public:
         id = ++serial;
     }
 
-    void displayStudentInfo() {
+    void displayStudentInfo() const {
         cout << "ID: " << id << endl;
         cout << "First Name: " << name << endl;
 		cout << "Last Name: " << lastname << endl;
@@ -202,7 +234,7 @@ public:
 
     void addInfo(const Student& student) {
         studentlist.push_back(student);
-        cout << "Student " << student.name << " added successfully." << endl;
+        cout << "Student " << student.name << " added successfully." << endl << endl;
 
     }
 
@@ -357,6 +389,136 @@ public:
         cout << "No such student with ID " << id << " exists in our records" << endl << endl;
         return;
     }
+
+
+    // File I/O Functions
+    // .txt is now obsolete
+
+    /* AI TIP:
+    const char* cannot be assigned to LPCWSTR / char* cannot be assigned to LPWSTR
+    This means your project is set to Unicode character set, but the string literals in OPENFILENAME are narrow (char*).
+
+    FIX:- Project → Properties → Advanced → Character Set → change to "Use Multi-Byte Character Set
+    Claude Sonnet 4.6
+    */
+
+
+
+    void saveDatabase() {
+        char filename[MAX_PATH] = "";
+
+        OPENFILENAME ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = NULL;
+        ofn.lpstrFilter = "CSV Files (*.csv)\0*.csv\0All Files (*.*)\0*.*\0";
+        ofn.lpstrFile = filename;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrTitle = "Save Database";
+        ofn.lpstrDefExt = "csv";
+        ofn.Flags = OFN_OVERWRITEPROMPT;
+
+        if (GetSaveFileName(&ofn)) {
+            ofstream file(filename);
+
+            if (!file.is_open()) {
+                cout << "Error: Could not open file for saving!" << endl << endl;
+                return;
+            }
+
+            file << "ID,FirstName,LastName,Age,Grade,Division" << endl;
+
+            for (const auto& student : studentlist) {
+                file << student.id << ","
+                    << student.name << ","
+                    << student.lastname << ","
+                    << student.age << ","
+                    << student.grade << ","
+                    << student.division << endl;
+            }
+
+            file.close();
+            cout << "Database saved successfully!" << endl << endl;
+        }
+        else {
+            cout << "Save operation cancelled." << endl << endl;
+        }
+    }
+
+    void loadDatabase() {
+        char filename[MAX_PATH] = "";
+
+        OPENFILENAME ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = NULL;
+        ofn.lpstrFilter = "CSV Files (*.csv)\0*.csv\0All Files (*.*)\0*.*\0";
+        ofn.lpstrFile = filename;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrTitle = "Load Database";
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST; // Prevents selecting a non-existent file
+
+        if (GetOpenFileName(&ofn)) {    // Opens the Open dialog. Returns true if user selects a file
+            ifstream file(filename);
+
+            if (!file.is_open()) {
+                cout << "Error: Could not open the selected file!" << endl << endl;
+                return;
+            }
+
+            studentlist.clear();
+
+            string line;
+            getline(file, line);    // Skip the header row
+
+            int maxID = -1;
+
+            while (getline(file, line)) {
+                if (line.empty()) continue;
+
+                stringstream ss(line);
+                string token;
+
+                int id, age, grade;
+                string name, lastname, division;
+
+                try {
+                    getline(ss, token, ',');  id = stoi(token);
+                    getline(ss, name, ',');
+                    getline(ss, lastname, ',');
+                    getline(ss, token, ',');  age = stoi(token);
+                    getline(ss, token, ',');  grade = stoi(token);
+                    getline(ss, division, ',');
+                }
+                catch (const invalid_argument&) {
+                    cout << "Error: Invalid argument found in CSV. Skipping bad record: ";
+                    cout << line << endl << endl;
+                    continue;
+                }
+                catch (const out_of_range&) {
+                    cout << "Error: Record Number is either too large or too small. Skipping bad record: ";
+                    cout << line << endl << endl;
+                    continue;
+                }
+
+
+                Student::serial = id - 1;
+                Student s(name, lastname, age, grade, division);
+                studentlist.push_back(s);
+
+                if (id > maxID) maxID = id;
+            }
+
+            Student::serial = maxID;    // Makes new records continue from the topmost existing ID
+
+            file.close();
+            cout << "Database loaded successfully! "
+                << studentlist.size() << " record(s) loaded." << endl << endl;
+        }
+        else {
+            cout << "Load operation cancelled." << endl << endl;
+        }
+    }
 };
 
 int Student::serial = -1;
@@ -364,42 +526,22 @@ int Student::serial = -1;
 int main()
 {
     StudentList sk;
-    
-    Student placeholderDataEntry = { "Fefault", "Lefault", 0, 0, "Default"};
-    sk.studentlist.push_back(placeholderDataEntry);
-    
-    Student s1("Hardik","Singh",23,17,"B");
-    Student s2("Mansi", "Pathak", 23, 17, "B");
-    Student s3("Ayushi", "Khanduri", 25, 19, "D");
-    Student s4("Brahmjot", "Singh", 23, 17, "A");
-    Student s5("Shelly", "Sharma", 25, 19, "B");
-    Student s6("Lahari", "Basu", 25, 19, "E");
-    sk.studentlist.push_back(s1);
-    sk.studentlist.push_back(s2);
-    sk.studentlist.push_back(s3);
-    sk.studentlist.push_back(s4);
-    sk.studentlist.push_back(s5);
-    sk.studentlist.push_back(s6);
-    
-    /*
-    sk.searchInfo("Sneha")->displayStudentInfo();
-    cout << endl;
-    */
 
-    int x = 5;
+    int x = 8888;
     
     int case3 = 0;
     while (x != 0) {
         bool case2 = true;
         switch (x) {
 
-        case 5:
+        case 8888:
             cout << "Database Menu. Select an option to proceed..." << endl;
             cout << "0. Exit" << endl;
             cout << "1. Add record" << endl;
             cout << "2. Search & Update menu" << endl;
             cout << "3. Delete menu" << endl;
 			cout << "4. Display all records" << endl;
+            cout << "5. Save/Load Database" << endl;
 			cout << "Which option would you like to choose? ";
             cin >> x;
             cout << endl;
@@ -409,22 +551,19 @@ int main()
         {
             Student S_add = { "", "", 0, 0, " " };
      
-            cout << "Enter the first name of the student: ";
-            cin >> S_add.name;
+            S_add.name = avoidCommas("Enter the first name of the student : ");
 
-            cout << "Enter the last name of the student: ";
-            cin >> S_add.lastname;
+            S_add.lastname = avoidCommas("Enter the last name of the student: ");
 
             S_add.age = getInt("Enter the age of the student: ");
 
             S_add.grade = getInt("Enter the grade of the student: ");
 
-            cout << "Enter the division of the student: ";
-            cin >> S_add.division;
+            S_add.division = avoidCommas("Enter the division of the student: ");
             cout << endl;
 
             sk.addInfo(S_add);
-            x = 5;
+            x = 8888;
             break;
         }
 
@@ -466,17 +605,13 @@ int main()
                 }
 
                 case 2: {
-                    string namelook;
-                    cout << "Enter the first name to search record(s) of: ";
-                    cin >> namelook;
+                    string namelook = avoidCommas("Enter the first name to search record(s) of: ");
                     sk.searchInfoByFirstName(namelook);
                     break;
                 }
 
                 case 3: {
-                    string lastnamelook;
-                    cout << "Enter the last name to search record(s) of: ";
-                    cin >> lastnamelook;
+                    string lastnamelook = avoidCommas("Enter the last name to search record(s) of: ");
                     sk.searchInfoByLastName(lastnamelook);
                     break;
                 }
@@ -496,13 +631,10 @@ int main()
                 case 6:
                 {
                     int gradelook = getInt("Enter the grade to search record(s) of: ");
-                    string divisionlook;
-                    cout << "Enter the division to search record(s) of: ";
-                    cin >> divisionlook;
+                    string divisionlook = avoidCommas("Enter the division to search record(s) of: ");
 
                     sk.searchInfoByDivision(gradelook, divisionlook);
                     break;
-
                 }
 
                 case 7:
@@ -527,8 +659,7 @@ int main()
 
                         case 1:
                             tempid = getInt("Enter the ID you wish to update the first name of: ");
-                            cout << "Enter the updated first name: ";
-                            cin >> stringupdate;
+                            stringupdate = avoidCommas("Enter the updated first name: ");
                             cout << endl;
 
                             sk.updateStringsInfo(tempid, case2_7option, stringupdate);
@@ -537,8 +668,7 @@ int main()
 
                         case 2:
                             tempid = getInt("Enter the ID you wish to update the last name of: ");
-                            cout << "Enter the updated last name: ";
-                            cin >> stringupdate;
+                            stringupdate = avoidCommas("Enter the updated last name: ");
                             cout << endl;
 
                             sk.updateStringsInfo(tempid, case2_7option, stringupdate);
@@ -563,8 +693,7 @@ int main()
 
                         case 5:
                             tempid = getInt("Enter the ID you wish to update the division of: ");
-                            cout << "Enter the updated division: ";
-                            cin >> stringupdate;
+                            stringupdate = avoidCommas("Enter the updated division: ");
                             cout << endl;
 
                             sk.updateStringsInfo(tempid, case2_7option, stringupdate);
@@ -579,18 +708,15 @@ int main()
                             int gradeupdate;
                             string divisionupdate;
 
-                            cout << "Enter the first name of the student: ";
-                            cin >> nameupdate;
+                            nameupdate = avoidCommas("Enter the first name of the student: ");
 
-                            cout << "Enter the last name of the student: ";
-                            cin >> lastnameupdate;
+                            lastnameupdate = avoidCommas("Enter the last name of the student: ");
 
                             ageupdate = getInt("Enter the age of the student: ");
 
                             gradeupdate = getInt("Enter the grade of the student: ");
 
-                            cout << "Enter the division of the student: ";
-                            cin >> divisionupdate;
+                            divisionupdate = avoidCommas("Enter the division of the student: ");
                             cout << endl;
 
                             sk.updateAllInfoByID(tempid, nameupdate, lastnameupdate, ageupdate, gradeupdate, divisionupdate);
@@ -612,7 +738,7 @@ int main()
                     break;
 
                 case 8:
-                    x = 5;
+                    x = 8888;
                     case2 = false;
                     cout << endl;
                     break;
@@ -629,7 +755,7 @@ int main()
 
         // 
         // Search & Update Ends
-
+            
         case 3:
             cout << "Enter an option to choose:" << endl;
             cout << "1. Delete by ID" << endl;
@@ -654,7 +780,7 @@ int main()
 
                 case 6: //Exit delete menu
                     case3 = 8;
-                    x = 5;
+                    x = 8888;
                     break;
 
                 case 1:
@@ -665,8 +791,7 @@ int main()
                     }
                     break;
                 case 2:
-                    cout << "Enter the first name of the records to delete: ";
-                    cin >> case3optionSTRING;
+                    case3optionSTRING = avoidCommas("Enter the first name of the records to delete: ");
                     
                     if (getYesNo("Are you sure you want to delete all the student records with this first name?")) {
                         sk.deleteInfoByFirstName(case3optionSTRING);
@@ -674,8 +799,7 @@ int main()
                     break;
 
                 case 3:
-                    cout << "Enter the last name of the records to delete: ";
-                    cin >> case3optionSTRING;
+                    case3optionSTRING = avoidCommas("Enter the last name of the records to delete: ");
 
                     if (getYesNo("Are you sure you want to delete all the student records with this last name?")) {
                         sk.deleteInfoByLastName(case3optionSTRING);
@@ -715,8 +839,64 @@ int main()
                 cout << "---------------------------------" << endl;
             }
             cout << endl;
-            x = 5;
+            x = 8888;
             break;
+        case 5: {
+            int case5option = 0;
+            bool case5exit = false;
+            
+            while (!case5exit) {
+                cout << "Save / Load Menu" << endl;
+                cout << "1. Load Database" << endl;
+                cout << "2. Save Database" << endl;
+                cout << "3. Exit to Main Menu" << endl;
+                cout << "WARNING: Avoid manually editing save files, as it may cause invalid records to be skipped entirely." << endl;
+                case5option = getInt("Enter the option you wish to choose: ");
+
+                switch (case5option) {
+                case 1:{
+                    cout << "Loading a new Database will overwrite the current Database. All the unsaved data will be lost..." << endl;
+                    bool case5tag = getYesNo("Do you wish to proceed?");
+
+                    if (case5tag) {
+                        cout << "Database Load operation initiated..." << endl << endl;
+                        this_thread::sleep_for(chrono::seconds(3));
+
+                        // Database Load Code
+                        sk.loadDatabase();
+
+                        cout << "Datase Load operation ended." << endl;
+                        cout << endl << endl;
+                    }
+                    else {
+                        cout << "Loading Database aborted!" << endl << endl;
+                    }
+
+                    break;
+                }
+                case 2:
+                    cout << "Database Save operation initiated..." << endl << endl;
+                    this_thread::sleep_for(chrono::seconds(3));
+
+                    // Database Save Code
+                    sk.saveDatabase();
+
+                    cout << "Datase Save operation ended." << endl;
+                    cout << endl << endl;
+                    break;
+                case 3:
+                    case5exit = true;
+                    x = 8888;
+                    break;
+                default:
+                    cout << "Enter a valid option!" << endl << endl;
+                    break;
+                }
+            }
+            
+            
+            break;
+        }
         default :
             cout << "Invalid option. Please try again." << endl;
             cout << "Which option would you like to choose? ";
