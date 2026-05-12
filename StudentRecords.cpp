@@ -71,7 +71,7 @@ string avoidCommas(const string& prompt) {
 
     while (true) {
         cout << prompt;
-        cin >> input;
+        getline(cin >> ws, input);
 
         if (input.find(',') == string::npos) {
             return input;
@@ -399,7 +399,7 @@ public:
     This means your project is set to Unicode character set, but the string literals in OPENFILENAME are narrow (char*).
 
     FIX:- Project → Properties → Advanced → Character Set → change to "Use Multi-Byte Character Set
-    Claude Sonnet 4.6
+    -Claude Sonnet 4.6
     */
 
 
